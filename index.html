@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Tagesbilanz" />
+<meta name="theme-color" content="#EAEFF1" />
+<title>Tagesbilanz</title>
+<link rel="preconnect" href="https://world.openfoodfacts.org" />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+  html,body{margin:0;padding:0;background:#EAEFF1;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  #root{min-height:100vh;}
+  .mono{font-variant-numeric:tabular-nums;}
+  .disp{font-family:'Space Grotesk',Inter,sans-serif;}
+  .fill{transition:width .45s cubic-bezier(.4,0,.2,1);}
+  button{font-family:inherit;cursor:pointer;}
+  .chip:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid #15252C;outline-offset:2px;}
+  input[type=number]::-webkit-inner-spin-button{opacity:.4;}
+  .catrow:hover{background:#F4F7F8;}
+  @media (prefers-reduced-motion: reduce){.fill{transition:none}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useMemo } = React;
+
+const C = {
+  bg:"#EAEFF1", card:"#FFFFFF", ink:"#15252C", muted:"#5E6E75", line:"#DCE4E7",
+  na:"#E4572E", k:"#2E9E5B", ca:"#2D6CDF", mg:"#7B4FC4",
+  good:"#2E9E5B", warn:"#E0A100", over:"#D6453B",
+};
+const TARGET = { kcal:2200, p:150, f:60, mg:350, ca:1000, na:2000, k:4000 };
+
+const FOODS = [
+  { id:"kart", n:"Pellkartoffeln", cat:"Basis", g:200, kcal:70, p:2, f:0.1, mg:20, ca:8, na:5, k:420 },
+  { id:"reis", n:"Reis, gekocht", cat:"Basis", g:150, kcal:130, p:2.7, f:0.3, mg:12, ca:10, na:1, k:35 },
+  { id:"hafer", n:"Haferflocken", cat:"Basis", g:80, kcal:370, p:13, f:7, mg:120, ca:50, na:5, k:350 },
+  { id:"vk", n:"Vollkornbrot", cat:"Basis", g:45, piece:45, kcal:230, p:9, f:3, mg:90, ca:45, na:450, k:250 },
+  { id:"haehn", n:"Hähnchenbrust", cat:"Eiweiß", g:180, kcal:110, p:23, f:1.5, mg:28, ca:10, na:60, k:330 },
+  { id:"lachs", n:"Lachs", cat:"Eiweiß", g:150, kcal:200, p:20, f:13, mg:29, ca:12, na:60, k:380 },
+  { id:"ei", n:"Ei (gekocht)", cat:"Eiweiß", g:55, piece:55, kcal:155, p:13, f:11, mg:12, ca:56, na:124, k:138 },
+  { id:"quark", n:"Magerquark", cat:"Eiweiß", g:250, kcal:67, p:12, f:0.3, mg:11, ca:90, na:40, k:110 },
+  { id:"skyr", n:"Skyr", cat:"Eiweiß", g:200, kcal:63, p:11, f:0.2, mg:11, ca:110, na:50, k:150 },
+  { id:"whey", n:"Whey-Shake", cat:"Eiweiß", g:30, piece:30, kcal:360, p:80, f:6, mg:80, ca:500, na:300, k:450 },
+  { id:"lin", n:"Linsen, gekocht", cat:"Allrounder", g:200, kcal:115, p:9, f:0.4, mg:36, ca:19, na:2, k:270 },
+  { id:"bohn", n:"Weiße Bohnen, gek.", cat:"Allrounder", g:200, kcal:110, p:7, f:0.5, mg:45, ca:60, na:2, k:420 },
+  { id:"kuerb", n:"Kürbiskerne", cat:"Allrounder", g:20, kcal:560, p:30, f:49, mg:535, ca:45, na:18, k:810 },
+  { id:"mand", n:"Mandeln", cat:"Allrounder", g:30, kcal:580, p:21, f:50, mg:270, ca:240, na:1, k:730 },
+  { id:"brok", n:"Brokkoli", cat:"Gemüse & Obst", g:200, kcal:35, p:2.8, f:0.4, mg:21, ca:47, na:15, k:290 },
+  { id:"spin", n:"Spinat", cat:"Gemüse & Obst", g:150, kcal:23, p:3, f:0.4, mg:60, ca:120, na:65, k:470 },
+  { id:"avo", n:"Avocado", cat:"Gemüse & Obst", g:100, kcal:160, p:2, f:15, mg:29, ca:12, na:7, k:485 },
+  { id:"tom", n:"Tomate", cat:"Gemüse & Obst", g:120, kcal:18, p:0.9, f:0.2, mg:11, ca:10, na:5, k:240 },
+  { id:"gurke", n:"Gurke", cat:"Gemüse & Obst", g:100, kcal:12, p:0.6, f:0.1, mg:8, ca:16, na:2, k:140 },
+  { id:"bana", n:"Banane", cat:"Gemüse & Obst", g:120, piece:120, kcal:90, p:1, f:0.3, mg:27, ca:5, na:1, k:360 },
+  { id:"apfel", n:"Apfel", cat:"Gemüse & Obst", g:150, piece:150, kcal:52, p:0.3, f:0.2, mg:5, ca:6, na:1, k:110 },
+  { id:"beere", n:"Beeren", cat:"Gemüse & Obst", g:100, kcal:45, p:1, f:0.4, mg:18, ca:25, na:1, k:160 },
+  { id:"milch", n:"Milch 1,5 %", cat:"Milch & Extras", g:250, kcal:47, p:3.4, f:1.5, mg:12, ca:120, na:45, k:150 },
+  { id:"joghurt", n:"Joghurt", cat:"Milch & Extras", g:150, kcal:65, p:4, f:3.5, mg:12, ca:120, na:50, k:155 },
+  { id:"schoko", n:"Zartbitterschoko.", cat:"Milch & Extras", g:20, kcal:550, p:8, f:38, mg:150, ca:50, na:12, k:350 },
+  { id:"bacon", n:"Bacon, gebraten", cat:"Salzig & Würze", g:30, kcal:540, p:37, f:42, mg:12, ca:11, na:1800, k:565 },
+  { id:"mayo", n:"Mayonnaise", cat:"Salzig & Würze", g:20, kcal:680, p:1, f:75, mg:2, ca:8, na:600, k:20 },
+  { id:"senf", n:"Senf", cat:"Salzig & Würze", g:10, kcal:100, p:5, f:4, mg:30, ca:60, na:1200, k:130 },
+  { id:"sahne", n:"Sahne", cat:"Salzig & Würze", g:45, kcal:290, p:2.5, f:30, mg:10, ca:80, na:30, k:90 },
+];
+const CATS = ["Basis","Eiweiß","Allrounder","Gemüse & Obst","Milch & Extras","Salzig & Würze"];
+const SALAT_PRESET = [
+  {id:"kart",grams:100},{id:"ei",grams:73},{id:"gurke",grams:33},{id:"bacon",grams:33},
+  {id:"joghurt",grams:50},{id:"mayo",grams:13},{id:"senf",grams:2},{id:"sahne",grams:15},
+];
+
+const round = (x)=>Math.round(x);
+
+const OFF = "https://world.openfoodfacts.org";
+const mgFrom=(g)=> g==null||g===""?null:Math.round(Number(g)*1000);
+const num=(v)=> v==null||v===""?null:Number(v);
+function mapProduct(p){
+  const nu=p.nutriments||{};
+  let kcal=num(nu["energy-kcal_100g"]);
+  if(kcal==null && num(nu["energy_100g"])!=null) kcal=Math.round(num(nu["energy_100g"])/4.184);
+  let na=mgFrom(nu["sodium_100g"]);
+  if(na==null && nu["salt_100g"]!=null) na=Math.round((Number(nu["salt_100g"])/2.5)*1000);
+  const portion=num(p.serving_quantity);
+  return {
+    id:"off_"+(p.code||Math.random().toString(36).slice(2)),
+    n:(p.product_name||p.generic_name||"Unbenannt").trim(),
+    brand:p.brands||"", cat:"Open Food Facts",
+    g: portion&&portion>0?Math.round(portion):100,
+    kcal:kcal??0, p:num(nu["proteins_100g"])??0, f:num(nu["fat_100g"])??0,
+    mg:mgFrom(nu["magnesium_100g"])??0, ca:mgFrom(nu["calcium_100g"])??0,
+    na:na??0, k:mgFrom(nu["potassium_100g"])??0,
+    incomplete: mgFrom(nu["magnesium_100g"])==null||mgFrom(nu["potassium_100g"])==null,
+  };
+}
+const FIELDS="code,product_name,generic_name,brands,serving_quantity,nutriments";
+async function searchFoods(term){
+  const url=OFF+"/cgi/search.pl?search_terms="+encodeURIComponent(term)+"&search_simple=1&action=process&json=1&page_size=8&lc=de&fields="+FIELDS;
+  const res=await fetch(url);
+  if(!res.ok) throw new Error("Suche fehlgeschlagen");
+  const data=await res.json();
+  return (data.products||[]).map(mapProduct).filter(f=>f.n!=="Unbenannt");
+}
+
+function totals(items, resolve){
+  const t={kcal:0,p:0,f:0,mg:0,ca:0,na:0,k:0};
+  for(const it of items){
+    const f=resolve(it.id); if(!f) continue;
+    const r=it.grams/100;
+    t.kcal+=f.kcal*r; t.p+=f.p*r; t.f+=f.f*r;
+    t.mg+=f.mg*r; t.ca+=f.ca*r; t.na+=f.na*r; t.k+=f.k*r;
+  }
+  return t;
+}
+
+function App(){
+  const [items,setItems]=useState([]);
+  const [openCat,setOpenCat]=useState("Basis");
+  const [extraFoods,setExtraFoods]=useState([]);
+  const [query,setQuery]=useState("");
+  const [results,setResults]=useState([]);
+  const [loading,setLoading]=useState(false);
+  const [err,setErr]=useState("");
+
+  const resolve=(id)=>FOODS.find(f=>f.id===id)||extraFoods.find(f=>f.id===id);
+  const t=useMemo(()=>totals(items,resolve),[items,extraFoods]);
+
+  const add=(id,grams)=>setItems(p=>[...p,{key:Math.random().toString(36).slice(2),id,grams}]);
+  const remove=(key)=>setItems(p=>p.filter(x=>x.key!==key));
+  const setGrams=(key,grams)=>setItems(p=>p.map(x=>x.key===key?{...x,grams:Math.max(0,grams)}:x));
+  const loadSalat=()=>setItems(p=>[...p,...SALAT_PRESET.map(s=>({key:Math.random().toString(36).slice(2),id:s.id,grams:s.grams}))]);
+
+  async function runSearch(){
+    const q=query.trim(); if(!q||loading) return;
+    setLoading(true); setErr(""); setResults([]);
+    try{
+      const list=await searchFoods(q);
+      if(list.length===0) setErr("Nichts gefunden. Anders formulieren?");
+      setResults(list);
+    }catch(e){ setErr("Suche fehlgeschlagen. Bist du online?"); }
+    finally{ setLoading(false); }
+  }
+  function pick(food){
+    setExtraFoods(p=>[...p,food]);
+    add(food.id,food.g);
+    setResults([]); setQuery("");
+  }
+
+  const ratio=t.na>0?t.k/t.na:(t.k>0?Infinity:0);
+  const ratioGood=ratio>=2, ratioOk=ratio>=1&&ratio<2;
+
+  const suggestions=useMemo(()=>{
+    const gaps={mg:TARGET.mg-t.mg, ca:TARGET.ca-t.ca, k:TARGET.k-t.k};
+    const worst=Object.entries(gaps).sort((a,b)=>b[1]-a[1])[0];
+    if(!worst||worst[1]<50) return null;
+    const key=worst[0]; const naLeft=TARGET.na-t.na;
+    const ranked=FOODS.map(f=>({f,gain:f[key]*f.g/100,na:f.na*f.g/100}))
+      .filter(x=>x.gain>30 && x.na<Math.max(150,naLeft*0.4))
+      .sort((a,b)=>b.gain-a.gain).slice(0,3);
+    return {key,gap:worst[1],list:ranked};
+  },[t]);
+  const labelByKey={mg:"Magnesium",ca:"Calcium",k:"Kalium"};
+
+  return (
+    <div style={{minHeight:"100vh",background:C.bg,color:C.ink,fontFamily:"Inter,ui-sans-serif,system-ui,sans-serif"}}>
+      <div style={{maxWidth:560,margin:"0 auto",padding:"20px 16px 64px"}}>
+        <header style={{marginBottom:18}}>
+          <div className="disp" style={{fontSize:13,letterSpacing:3,color:C.muted,textTransform:"uppercase"}}>Tagesbilanz</div>
+          <h1 className="disp" style={{fontSize:30,margin:"2px 0 4px",lineHeight:1.05}}>Dein Tag, im Gleichgewicht</h1>
+          <p style={{margin:0,fontSize:14,color:C.muted,lineHeight:1.4}}>
+            Mahlzeiten hinzufügen, Bilanz live ablesen. Natrium ist ein Budget mit Decke – der Rest sind Ziele zum Erreichen.
+          </p>
+        </header>
+
+        <section style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:14}}>
+          <Macro label="Kalorien" val={round(t.kcal)} unit="kcal" target={"Ziel "+TARGET.kcal} tone={t.kcal>2400?C.over:t.kcal>=2000?C.good:C.muted}/>
+          <Macro label="Eiweiß" val={round(t.p)} unit="g" target={"Ziel \u2265 "+TARGET.p} tone={t.p>=TARGET.p?C.good:C.muted}/>
+          <Macro label="Fett" val={round(t.f)} unit="g" target="fettarm" tone={t.f>70?C.over:t.f>50?C.warn:C.good}/>
+        </section>
+
+        <section style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+          <Element sym="Mg" name="Magnesium" cur={t.mg} target={TARGET.mg} color={C.mg} mode="reach"/>
+          <Element sym="Ca" name="Calcium" cur={t.ca} target={TARGET.ca} color={C.ca} mode="reach"/>
+          <Element sym="K" name="Kalium" cur={t.k} target={TARGET.k} color={C.k} mode="reach"/>
+          <Element sym="Na" name="Natrium" cur={t.na} target={TARGET.na} color={C.na} mode="budget"/>
+        </section>
+
+        <section style={{background:C.card,borderRadius:14,padding:"12px 14px",marginBottom:14,border:"1px solid "+C.line}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+            <span style={{fontSize:13,fontWeight:600}}>Natrium : Kalium</span>
+            <span className="mono disp" style={{fontSize:18,color:ratioGood?C.good:ratioOk?C.warn:C.over}}>
+              {t.na===0&&t.k===0?"\u2013":ratio===Infinity?"nur Kalium":"1 : "+ratio.toFixed(1)}
+            </span>
+          </div>
+          <Beam na={t.na} k={t.k}/>
+          <p style={{margin:"8px 0 0",fontSize:12.5,color:C.muted,lineHeight:1.4}}>
+            {t.na===0&&t.k===0?"Füge etwas hinzu, um die Waage zu sehen."
+              :ratioGood?"Gut – Kalium liegt klar vor Natrium. Genau die richtige Richtung."
+              :ratioOk?"Grenzwertig. Mehr Kalium (Gemüse, Kartoffeln, Hülsenfrüchte) bringt die Waage ins Lot."
+              :"Natrium überwiegt. Salzquelle reduzieren oder kräftig Kalium nachlegen."}
+          </p>
+        </section>
+
+        {suggestions && (
+          <section style={{background:"#FBFCEC",border:"1px solid #E7E8C6",borderRadius:14,padding:"12px 14px",marginBottom:14}}>
+            <div style={{fontSize:13,fontWeight:700,marginBottom:2}}>Was dir noch fehlt: {labelByKey[suggestions.key]}</div>
+            <p style={{margin:"0 0 8px",fontSize:12.5,color:C.muted}}>
+              Noch ~{round(suggestions.gap)} mg offen. Diese Quellen füllen die Lücke, ohne dein Salzbudget zu belasten:
+            </p>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {suggestions.list.map(s=>(
+                <button key={s.f.id} className="chip" onClick={()=>add(s.f.id,s.f.g)}
+                  style={{background:C.card,border:"1px solid "+C.line,borderRadius:999,padding:"6px 11px",fontSize:12.5,color:C.ink,display:"flex",gap:6,alignItems:"center"}}>
+                  <span style={{fontWeight:600}}>{s.f.n}</span>
+                  <span className="mono" style={{color:C.muted}}>+{round(s.gain)} mg</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section style={{marginBottom:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <h2 className="disp" style={{fontSize:18,margin:0}}>Mein Tag</h2>
+            {items.length>0 && <button onClick={()=>setItems([])} style={{background:"none",border:"none",color:C.muted,fontSize:12.5}}>alles entfernen</button>}
+          </div>
+          {items.length===0 ? (
+            <div style={{background:C.card,border:"1px dashed "+C.line,borderRadius:14,padding:"22px 14px",textAlign:"center"}}>
+              <p style={{margin:"0 0 12px",fontSize:14,color:C.muted}}>Noch leer. Lade als Start die Kartoffelsalat-Portion – oder füg unten Lebensmittel hinzu.</p>
+              <button onClick={loadSalat} style={{background:C.ink,color:"#fff",border:"none",borderRadius:10,padding:"10px 16px",fontSize:13.5,fontWeight:600}}>🥔 Kartoffelsalat-Portion laden</button>
+            </div>
+          ) : (
+            <div style={{background:C.card,border:"1px solid "+C.line,borderRadius:14,overflow:"hidden"}}>
+              {items.map((it,i)=>{
+                const f=resolve(it.id); if(!f) return null;
+                return (
+                  <div key={it.key} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderTop:i?"1px solid "+C.line:"none"}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{f.n}</div>
+                      <div className="mono" style={{fontSize:11.5,color:C.muted}}>{round(f.kcal*it.grams/100)} kcal · Na {round(f.na*it.grams/100)} · K {round(f.k*it.grams/100)}</div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:4}}>
+                      <input type="number" className="mono" value={it.grams}
+                        onChange={(e)=>setGrams(it.key,parseInt(e.target.value||"0",10))}
+                        style={{width:56,textAlign:"right",border:"1px solid "+C.line,borderRadius:8,padding:"5px 6px",fontSize:13}}/>
+                      <span style={{fontSize:12,color:C.muted}}>g</span>
+                    </div>
+                    <button onClick={()=>remove(it.key)} aria-label="entfernen" style={{background:"none",border:"none",color:C.muted,fontSize:18,lineHeight:1,padding:"2px 4px"}}>×</button>
+                  </div>
+                );
+              })}
+              <div style={{padding:"8px 12px",borderTop:"1px solid "+C.line}}>
+                <button onClick={loadSalat} style={{background:"none",border:"none",color:C.na,fontSize:12.5,fontWeight:600}}>+ Kartoffelsalat-Portion dazu</button>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section>
+          <h2 className="disp" style={{fontSize:18,margin:"0 0 8px"}}>Lebensmittel hinzufügen</h2>
+
+          <div style={{background:C.card,border:"1px solid "+C.line,borderRadius:14,padding:"12px 13px",marginBottom:10}}>
+            <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>Beliebiges Lebensmittel</div>
+            <p style={{margin:"0 0 9px",fontSize:12,color:C.muted,lineHeight:1.4}}>Steht etwas nicht in der Liste? Suche bei Open Food Facts.</p>
+            <div style={{display:"flex",gap:7}}>
+              <input value={query} onChange={(e)=>setQuery(e.target.value)} onKeyDown={(e)=>{if(e.key==="Enter")runSearch();}}
+                placeholder="z. B. Skyr Natur, Falafel…" disabled={loading}
+                style={{flex:1,border:"1px solid "+C.line,borderRadius:10,padding:"10px 12px",fontSize:14,color:C.ink,background:loading?"#F4F7F8":"#fff"}}/>
+              <button onClick={runSearch} disabled={loading||!query.trim()}
+                style={{background:query.trim()&&!loading?C.ink:"#C3CDD1",color:"#fff",border:"none",borderRadius:10,padding:"0 16px",fontSize:13.5,fontWeight:600,whiteSpace:"nowrap"}}>
+                {loading?"…":"Suchen"}
+              </button>
+            </div>
+            {err && <div style={{fontSize:12,color:C.over,marginTop:8}}>{err}</div>}
+            {results.length>0 && (
+              <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6}}>
+                {results.map(f=>(
+                  <button key={f.id} onClick={()=>pick(f)}
+                    style={{textAlign:"left",background:"#F6F9FA",border:"1px solid "+C.line,borderRadius:10,padding:"9px 12px"}}>
+                    <div style={{fontSize:13.5,fontWeight:600}}>{f.n}{f.brand?" · "+f.brand:""}</div>
+                    <div className="mono" style={{fontSize:11,color:C.muted}}>
+                      {f.g} g · {f.kcal} kcal · Mg{f.mg} Ca{f.ca} Na{f.na} K{f.k}{f.incomplete?"  ⚠️ unvollständig":""}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{background:C.card,border:"1px solid "+C.line,borderRadius:14,overflow:"hidden"}}>
+            {CATS.map((cat,ci)=>{
+              const open=openCat===cat;
+              return (
+                <div key={cat} style={{borderTop:ci===0?"none":"1px solid "+C.line}}>
+                  <button className="catrow" onClick={()=>setOpenCat(open?"":cat)}
+                    style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"none",border:"none",padding:"12px 14px",fontSize:14,fontWeight:600,color:C.ink}}>
+                    <span>{cat}</span>
+                    <span style={{color:C.muted,transform:open?"rotate(90deg)":"none",transition:"transform .2s"}}>›</span>
+                  </button>
+                  {open && (
+                    <div style={{padding:"0 8px 8px"}}>
+                      {FOODS.filter(f=>f.cat===cat).map(f=>(
+                        <button key={f.id} onClick={()=>add(f.id,f.g)}
+                          style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#F6F9FA",border:"1px solid "+C.line,borderRadius:10,padding:"9px 12px",marginTop:6,textAlign:"left"}}>
+                          <span style={{fontSize:13.5,fontWeight:500}}>{f.n}</span>
+                          <span className="mono" style={{fontSize:11.5,color:C.muted}}>{f.piece?"1 Stk · ":""}{f.g} g · Mg{f.mg} K{f.k} Na{f.na}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <p style={{fontSize:11.5,color:C.muted,marginTop:10,lineHeight:1.4}}>
+            Kuratierte Werte sind gerundete Schätzwerte pro Portion. Open-Food-Facts-Daten sind crowdsourced und können lückenhaft sein. Mg/Ca/Na/K in mg.
+          </p>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function Macro({label,val,unit,target,tone}){
+  return (
+    <div style={{background:C.card,border:"1px solid "+C.line,borderRadius:12,padding:"10px 11px"}}>
+      <div style={{fontSize:11,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:.5}}>{label}</div>
+      <div className="mono disp" style={{fontSize:22,color:tone,lineHeight:1.1,marginTop:2}}>{val}<span style={{fontSize:12,color:C.muted,marginLeft:2}}>{unit}</span></div>
+      <div style={{fontSize:10.5,color:C.muted,marginTop:1}}>{target}</div>
+    </div>
+  );
+}
+function Element({sym,name,cur,target,color,mode}){
+  const pct=Math.min(100,(cur/target)*100);
+  const over=cur>target;
+  const barColor=mode==="budget"?(over?C.over:color):color;
+  const statusText=mode==="budget"?(over?"über Budget":round(target-cur)+" mg übrig"):(cur>=target?"Ziel erreicht":round(target-cur)+" mg offen");
+  const statusColor=mode==="budget"?(over?C.over:C.muted):(cur>=target?C.good:C.muted);
+  return (
+    <div style={{background:C.card,border:"1px solid "+C.line,borderRadius:14,padding:"12px 13px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
+        <div className="disp" style={{width:34,height:34,borderRadius:8,background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:700}}>{sym}</div>
+        <div style={{lineHeight:1.1}}>
+          <div style={{fontSize:13,fontWeight:600}}>{name}</div>
+          <div className="mono" style={{fontSize:11.5,color:C.muted}}>{round(cur)} / {target} mg</div>
+        </div>
+      </div>
+      <div style={{height:7,background:"#EDF1F2",borderRadius:99,overflow:"hidden"}}>
+        <div className="fill" style={{width:pct+"%",height:"100%",background:barColor,borderRadius:99}}/>
+      </div>
+      <div style={{fontSize:11,color:statusColor,marginTop:5,fontWeight:500}}>{statusText}</div>
+    </div>
+  );
+}
+function Beam({na,k}){
+  const total=na+k||1; const naPct=(na/total)*100;
+  return (
+    <div style={{marginTop:10}}>
+      <div style={{display:"flex",height:14,borderRadius:99,overflow:"hidden",background:"#EDF1F2"}}>
+        <div className="fill" style={{width:naPct+"%",background:C.na}}/>
+        <div className="fill" style={{width:(100-naPct)+"%",background:C.k}}/>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+        <span className="mono" style={{fontSize:11,color:C.na,fontWeight:600}}>Na {round(na)} mg</span>
+        <span className="mono" style={{fontSize:11,color:C.k,fontWeight:600}}>K {round(k)} mg</span>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
