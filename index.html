@@ -30,9 +30,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 
 <script type="text/babel" data-presets="react">
-const { useState, useMemo } = React;
+const { useState, useMemo, useEffect, useRef } = React;
 
 const C = {
   bg:"#EAEFF1", card:"#FFFFFF", ink:"#15252C", muted:"#5E6E75", line:"#DCE4E7",
@@ -109,6 +110,14 @@ async function searchFoods(term){
   const data=await res.json();
   return (data.products||[]).map(mapProduct).filter(f=>f.n!=="Unbenannt");
 }
+async function getByBarcode(code){
+  const url=OFF+"/api/v2/product/"+encodeURIComponent(code)+".json?fields="+FIELDS;
+  const res=await fetch(url);
+  if(!res.ok) throw new Error("nicht gefunden");
+  const data=await res.json();
+  if(data.status!==1||!data.product) throw new Error("nicht in Datenbank");
+  return mapProduct(data.product);
+}
 
 function totals(items, resolve){
   const t={kcal:0,p:0,f:0,mg:0,ca:0,na:0,k:0};
@@ -129,6 +138,9 @@ function App(){
   const [results,setResults]=useState([]);
   const [loading,setLoading]=useState(false);
   const [err,setErr]=useState("");
+  const [scanning,setScanning]=useState(false);
+  const [scanErr,setScanErr]=useState("");
+  const scannerRef=useRef(null);
 
   const resolve=(id)=>FOODS.find(f=>f.id===id)||extraFoods.find(f=>f.id===id);
   const t=useMemo(()=>totals(items,resolve),[items,extraFoods]);
@@ -152,6 +164,33 @@ function App(){
     setExtraFoods(p=>[...p,food]);
     add(food.id,food.g);
     setResults([]); setQuery("");
+  }
+
+  // Live-Barcode-Scanner (html5-qrcode)
+  useEffect(()=>{
+    if(!scanning) return;
+    if(typeof Html5Qrcode==="undefined"){ setScanErr("Scanner konnte nicht geladen werden (online?)."); setScanning(false); return; }
+    let active=true;
+    const inst=new Html5Qrcode("reader");
+    scannerRef.current=inst;
+    inst.start(
+      {facingMode:"environment"},
+      {fps:10, qrbox:{width:260,height:170}},
+      (decoded)=>{ if(!active) return; active=false; onScan(decoded); },
+      ()=>{}
+    ).catch(e=>{ setScanErr("Kamera nicht verfügbar: "+((e&&e.message)||e)); setScanning(false); });
+    return ()=>{ active=false; try{ inst.stop().then(()=>inst.clear()).catch(()=>{}); }catch(e){} };
+  },[scanning]);
+
+  async function onScan(code){
+    setScanning(false);
+    setErr(""); setResults([]); setLoading(true);
+    try{
+      const food=await getByBarcode(code);
+      setResults([food]);
+    }catch(e){
+      setErr("Barcode "+code+" nicht in Open Food Facts gefunden. Versuch die Textsuche.");
+    }finally{ setLoading(false); }
   }
 
   const ratio=t.na>0?t.k/t.na:(t.k>0?Infinity:0);
@@ -279,21 +318,43 @@ function App(){
                 {loading?"…":"Suchen"}
               </button>
             </div>
-            {err && <div style={{fontSize:12,color:C.over,marginTop:8}}>{err}</div>}
-            {results.length>0 && (
-              <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6}}>
-                {results.map(f=>(
-                  <button key={f.id} onClick={()=>pick(f)}
-                    style={{textAlign:"left",background:"#F6F9FA",border:"1px solid "+C.line,borderRadius:10,padding:"9px 12px"}}>
-                    <div style={{fontSize:13.5,fontWeight:600}}>{f.n}{f.brand?" · "+f.brand:""}</div>
-                    <div className="mono" style={{fontSize:11,color:C.muted}}>
-                      {f.g} g · {f.kcal} kcal · Mg{f.mg} Ca{f.ca} Na{f.na} K{f.k}{f.incomplete?"  ⚠️ unvollständig":""}
-                    </div>
-                  </button>
-                ))}
+          </div>
+
+          <div style={{background:C.card,border:"1px solid "+C.line,borderRadius:14,padding:"12px 13px",marginBottom:10}}>
+            <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>Barcode scannen</div>
+            <p style={{margin:"0 0 9px",fontSize:12,color:C.muted,lineHeight:1.4}}>Verpacktes Produkt? Strichcode vor die Kamera halten – wird automatisch erkannt.</p>
+            {!scanning ? (
+              <button onClick={()=>{ setScanErr(""); setErr(""); setScanning(true); }}
+                style={{background:C.ink,color:"#fff",border:"none",borderRadius:10,padding:"10px 16px",fontSize:13.5,fontWeight:600}}>
+                📷 Scanner starten
+              </button>
+            ) : (
+              <div>
+                <div id="reader" style={{width:"100%",borderRadius:10,overflow:"hidden",background:"#000"}}></div>
+                <button onClick={()=>setScanning(false)}
+                  style={{marginTop:8,background:"none",border:"1px solid "+C.line,borderRadius:10,padding:"8px 14px",fontSize:13,fontWeight:600,color:C.ink}}>
+                  Scanner schließen
+                </button>
               </div>
             )}
+            {scanErr && <div style={{fontSize:12,color:C.over,marginTop:8}}>{scanErr}</div>}
           </div>
+
+          {err && <div style={{fontSize:12,color:C.over,marginBottom:8}}>{err}</div>}
+          {results.length>0 && (
+            <div style={{marginBottom:10,display:"flex",flexDirection:"column",gap:6}}>
+              <div style={{fontSize:12,color:C.muted,fontWeight:600}}>Treffer – tippen zum Hinzufügen:</div>
+              {results.map(f=>(
+                <button key={f.id} onClick={()=>pick(f)}
+                  style={{textAlign:"left",background:C.card,border:"1px solid "+C.line,borderRadius:10,padding:"9px 12px"}}>
+                  <div style={{fontSize:13.5,fontWeight:600}}>{f.n}{f.brand?" · "+f.brand:""}</div>
+                  <div className="mono" style={{fontSize:11,color:C.muted}}>
+                    {f.g} g · {f.kcal} kcal · Mg{f.mg} Ca{f.ca} Na{f.na} K{f.k}{f.incomplete?"  ⚠️ unvollständig":""}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
 
           <div style={{background:C.card,border:"1px solid "+C.line,borderRadius:14,overflow:"hidden"}}>
             {CATS.map((cat,ci)=>{
