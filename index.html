@@ -74,10 +74,6 @@ const FOODS = [
   { id:"sahne", n:"Sahne", cat:"Salzig & Würze", g:45, kcal:290, p:2.5, f:30, mg:10, ca:80, na:30, k:90 },
 ];
 const CATS = ["Basis","Eiweiß","Allrounder","Gemüse & Obst","Milch & Extras","Salzig & Würze"];
-const SALAT_PRESET = [
-  {id:"kart",grams:100},{id:"ei",grams:73},{id:"gurke",grams:33},{id:"bacon",grams:33},
-  {id:"joghurt",grams:50},{id:"mayo",grams:13},{id:"senf",grams:2},{id:"sahne",grams:15},
-];
 
 const round = (x)=>Math.round(x);
 
@@ -148,7 +144,6 @@ function App(){
   const add=(id,grams)=>setItems(p=>[...p,{key:Math.random().toString(36).slice(2),id,grams}]);
   const remove=(key)=>setItems(p=>p.filter(x=>x.key!==key));
   const setGrams=(key,grams)=>setItems(p=>p.map(x=>x.key===key?{...x,grams:Math.max(0,grams)}:x));
-  const loadSalat=()=>setItems(p=>[...p,...SALAT_PRESET.map(s=>({key:Math.random().toString(36).slice(2),id:s.id,grams:s.grams}))]);
 
   async function runSearch(){
     const q=query.trim(); if(!q||loading) return;
@@ -273,8 +268,7 @@ function App(){
           </div>
           {items.length===0 ? (
             <div style={{background:C.card,border:"1px dashed "+C.line,borderRadius:14,padding:"22px 14px",textAlign:"center"}}>
-              <p style={{margin:"0 0 12px",fontSize:14,color:C.muted}}>Noch leer. Lade als Start die Kartoffelsalat-Portion – oder füg unten Lebensmittel hinzu.</p>
-              <button onClick={loadSalat} style={{background:C.ink,color:"#fff",border:"none",borderRadius:10,padding:"10px 16px",fontSize:13.5,fontWeight:600}}>🥔 Kartoffelsalat-Portion laden</button>
+              <p style={{margin:0,fontSize:14,color:C.muted}}>Noch leer. Füg unten Lebensmittel hinzu – per Liste, Barcode oder Suche.</p>
             </div>
           ) : (
             <div style={{background:C.card,border:"1px solid "+C.line,borderRadius:14,overflow:"hidden"}}>
@@ -296,9 +290,6 @@ function App(){
                   </div>
                 );
               })}
-              <div style={{padding:"8px 12px",borderTop:"1px solid "+C.line}}>
-                <button onClick={loadSalat} style={{background:"none",border:"none",color:C.na,fontSize:12.5,fontWeight:600}}>+ Kartoffelsalat-Portion dazu</button>
-              </div>
             </div>
           )}
         </section>
